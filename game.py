@@ -1,5 +1,6 @@
 import pygame
 import sys
+import platform
 from typing import Optional, Tuple
 from board import Board
 from ai import AI
@@ -20,20 +21,55 @@ class Game:
         # AI
         self.ai = AI(2)
         
-        # 폰트 - 한글 지원
-        try:
-            # Windows 시스템 폰트 사용
-            self.font = pygame.font.Font("C:/Windows/Fonts/malgun.ttf", 36)
-            self.small_font = pygame.font.Font("C:/Windows/Fonts/malgun.ttf", 24)
-        except:
+        # 폰트 - 운영체제별 한글 지원 폰트 설정
+        system = platform.system()
+        font_loaded = False
+        
+        if system == "Darwin":  # macOS
+            mac_fonts = [
+                "/System/Library/Fonts/AppleSDGothicNeo.ttc",  # Apple SD Gothic Neo
+                "/Library/Fonts/NanumGothic.ttf",  # 나눔고딕 (설치되어 있다면)
+                "/System/Library/Fonts/Helvetica.ttc",  # 대체 폰트
+                "/System/Library/Fonts/Supplemental/Arial Unicode MS.ttf",  # Arial Unicode MS
+            ]
+            for font_path in mac_fonts:
+                try:
+                    self.font = pygame.font.Font(font_path, 36)
+                    self.small_font = pygame.font.Font(font_path, 24)
+                    font_loaded = True
+                    print(f"Mac 한글 폰트 로드 성공: {font_path}")
+                    break
+                except:
+                    continue
+        
+        elif system == "Windows":  # Windows
+            windows_fonts = [
+                "C:/Windows/Fonts/malgun.ttf",  # 맑은 고딕
+                "C:/Windows/Fonts/gulim.ttc",   # 굴림
+                "C:/Windows/Fonts/NanumGothic.ttf",  # 나눔고딕
+            ]
+            for font_path in windows_fonts:
+                try:
+                    self.font = pygame.font.Font(font_path, 36)
+                    self.small_font = pygame.font.Font(font_path, 24)
+                    font_loaded = True
+                    print(f"Windows 한글 폰트 로드 성공: {font_path}")
+                    break
+                except:
+                    continue
+        
+        # 폰트 로드 실패시 pygame의 시스템 폰트 사용
+        if not font_loaded:
             try:
-                # 대체 폰트
-                self.font = pygame.font.Font("C:/Windows/Fonts/gulim.ttc", 36)
-                self.small_font = pygame.font.Font("C:/Windows/Fonts/gulim.ttc", 24)
+                # pygame의 시스템 폰트에서 한글 지원 폰트 찾기
+                self.font = pygame.font.SysFont('applesdfgothicneo,nanumgothic,malgun,gulim', 36)
+                self.small_font = pygame.font.SysFont('applesdfgothicneo,nanumgothic,malgun,gulim', 24)
+                print("시스템 폰트 사용 (한글 지원)")
             except:
-                # 기본 폰트 사용
+                # 최후의 수단으로 기본 폰트 사용
                 self.font = pygame.font.Font(None, 36)
                 self.small_font = pygame.font.Font(None, 24)
+                print("기본 폰트 사용 (한글 표시 제한)")
         
         # UI 상태
         self.show_menu = True
@@ -157,15 +193,36 @@ class Game:
     
     def draw_game_info(self):
         """게임 정보 그리기"""
-        # 현재 플레이어 표시
-        player_text = f"현재 플레이어: {'검은 돌' if self.current_player == 1 else '흰 돌'}"
+        # 게임 모드에 따른 플레이어 정보 표시
+        if self.game_mode == "2player":
+            # 2인용 게임
+            if self.current_player == 1:
+                player_text = "현재 차례: 플레이어 1 (검은 돌)"
+            else:
+                player_text = "현재 차례: 플레이어 2 (흰 돌)"
+        else:
+            # AI 게임
+            if self.current_player == 1:
+                player_text = "현재 차례: 당신 (검은 돌)"
+            else:
+                player_text = "현재 차례: AI (흰 돌)"
+        
         player_surface = self.small_font.render(player_text, True, (255, 255, 255))
         self.screen.blit(player_surface, (10, 10))
+        
+        # 사용자 돌 색깔 안내 (AI 게임에서만)
+        if self.game_mode != "2player":
+            user_info = "당신의 돌: 검은 돌 | AI의 돌: 흰 돌"
+            user_surface = self.small_font.render(user_info, True, (150, 200, 255))
+            self.screen.blit(user_surface, (10, 35))
+            y_offset = 60
+        else:
+            y_offset = 35
         
         # 게임 모드 표시
         mode_text = f"모드: {self.menu_options[self.selected_mode]}"
         mode_surface = self.small_font.render(mode_text, True, (255, 255, 255))
-        self.screen.blit(mode_surface, (10, 35))
+        self.screen.blit(mode_surface, (10, y_offset))
         
         # 조작법
         controls = [
@@ -175,7 +232,7 @@ class Game:
         ]
         for i, control in enumerate(controls):
             control_surface = self.small_font.render(control, True, (200, 200, 200))
-            self.screen.blit(control_surface, (10, 60 + i * 20))
+            self.screen.blit(control_surface, (10, y_offset + 25 + i * 20))
     
     def draw_game_over(self):
         """게임 오버 화면 그리기"""
@@ -189,8 +246,18 @@ class Game:
         if self.winner == 0:
             message = "무승부!"
         else:
-            winner_name = "검은 돌" if self.winner == 1 else "흰 돌"
-            message = f"{winner_name} 승리!"
+            if self.game_mode == "2player":
+                # 2인용 게임일 때
+                if self.winner == 1:
+                    message = "플레이어 1 (검은 돌) 승리!"
+                else:
+                    message = "플레이어 2 (흰 돌) 승리!"
+            else:
+                # AI 게임일 때
+                if self.winner == 1:
+                    message = "당신이 승리했습니다!"
+                else:
+                    message = "AI가 승리했습니다!"
         
         result_text = self.font.render(message, True, (255, 255, 255))
         result_rect = result_text.get_rect(center=(self.board.screen_width // 2, self.board.screen_height // 2))
